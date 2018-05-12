@@ -1,0 +1,8 @@
+[package]
+name = "racebot"
+version = "0.1.0"
+authors = ["graham"]
+
+[dependencies]
+serenity = "0.1.5"
+dotenv = "*"
