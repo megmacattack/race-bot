@@ -1,0 +1,9 @@
+[package]
+name = "racebot"
+version = "0.1.0"
+authors = ["megan"]
+
+[dependencies]
+lazy_static = "*"
+serenity = "0.1.5"
+dotenv = "*"
