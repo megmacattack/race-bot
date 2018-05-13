@@ -1,8 +1,11 @@
 extern crate dotenv;
+extern crate ordinal;
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate serenity;
 
 use dotenv::var;
+
+use ordinal::Ordinal;
 
 use serenity::Client;
 use serenity::model::id::{ChannelId, UserId};
@@ -50,7 +53,7 @@ command!(open_race(_ctx, msg) {
 				ready: 0,
 			};
 			chan
-				.send_message(|msg| msg.content("race opened: !"))
+				.send_message(|msg| msg.content("race opened: Please !enter the race and !ready once ready"))
 				.unwrap();
 
 		},
@@ -82,11 +85,11 @@ command!(enter_race(_ctx, msg) {
 				println!("{:?} entered race in {:?}", msg.author, chan);
 				players.insert(msg.author.id, Racer::Entered { user: msg.author.clone() });
 				chan
-					.send_message(|smsg| smsg.content(&format!("@{:} entered the race!", msg.author.name)))
+					.send_message(|smsg| smsg.content(&format!("{} entered the race!", msg.author)))
 					.unwrap();
 			} else {
 				chan
-					.send_message(|smsg| smsg.content(&format!("@{:} has already entered the race.", msg.author.name)))
+					.send_message(|smsg| smsg.content(&format!("{} has already entered the race.", msg.author)))
 					.unwrap();						
 			}
 		},
@@ -119,12 +122,12 @@ command!(ready_for_race(_ctx, msg) {
 						*player = Racer::Ready { user: user.clone() };
 						*ready += 1;
 						chan
-							.send_message(|smsg| smsg.content(&format!("{:?} is ready to play!", msg.author)))
+							.send_message(|smsg| smsg.content(&format!("{} is ready to play!", msg.author)))
 							.unwrap();
 					},
 					Racer::Ready { .. } => {
 						chan
-							.send_message(|smsg| smsg.content(&format!("{:?} was already ready.", msg.author)))
+							.send_message(|smsg| smsg.content(&format!("{} was already ready.", msg.author)))
 							.unwrap();
 					},
 					Racer::Finished { .. } => { panic!("Finished racer when race not running??") },
@@ -181,12 +184,12 @@ command!(done_race(_ctx, msg) {
 						};
 						*finished += 1;
 						chan
-							.send_message(|smsg| smsg.content(&format!("{:?} finished in {:}th place!", msg.author, *finished)))
+							.send_message(|smsg| smsg.content(&format!("{} finished in {} place!", msg.author, Ordinal::from(*finished))))
 							.unwrap();
 					},
 					Racer::Finished {..} => {
 						chan
-							.send_message(|smsg| smsg.content(&format!("{:?} was already finished.", msg.author)))
+							.send_message(|smsg| smsg.content(&format!("{} was already finished.", msg.author)))
 							.unwrap();
 					}
 				}

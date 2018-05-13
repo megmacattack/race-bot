@@ -7,3 +7,4 @@ authors = ["megan"]
 lazy_static = "*"
 serenity = "0.5.3"
 dotenv = "*"
+ordinal = "0.1"
