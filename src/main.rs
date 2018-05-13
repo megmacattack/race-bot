@@ -5,11 +5,10 @@ extern crate dotenv;
 use dotenv::var;
 
 use serenity::Client;
-//use serenity::client::Context;
-//use serenity::model::Message;
-use serenity::model::{ChannelId, User, UserId};
-//use serenity::utils::builder::CreateEmbed;
-//use serenity::utils::Colour;
+use serenity::model::id::{ChannelId, UserId};
+use serenity::model::user::User;
+use serenity::prelude::EventHandler;
+use serenity::framework::standard::StandardFramework;
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -206,18 +205,21 @@ command!(done_race(_ctx, msg) {
 
 });
 
+struct Handler;
+
+impl EventHandler for Handler {}
+
 fn main() {
     let token = var("DISCORD_TOKEN").expect("Expected DISCORD_TOKEN Environment Variable");
-    let mut client = Client::login_bot(&token);
+    let mut client = Client::new(&token, Handler).expect("Failure creating discord client");
 
-	client.with_framework(move |app| {
-		app
-			.configure(|config| config.prefix("!"))
-			.on("open", open_race)
-			.on("enter", enter_race)
-			.on("ready", ready_for_race)
-			.on("done", done_race)
-	});
+	client.with_framework(StandardFramework::new()
+		.configure(|config| config.prefix("!"))
+		.cmd("open", open_race)
+		.cmd("enter", enter_race)
+		.cmd("ready", ready_for_race)
+		.cmd("done", done_race)
+	);
 
     println!("Race bot started");
     client.start().unwrap();

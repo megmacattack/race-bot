@@ -5,5 +5,5 @@ authors = ["megan"]
 
 [dependencies]
 lazy_static = "*"
-serenity = "0.1.5"
+serenity = "0.5.3"
 dotenv = "*"
