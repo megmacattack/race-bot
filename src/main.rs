@@ -15,13 +15,13 @@ use serenity::framework::standard::StandardFramework;
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use std::time::{SystemTime};
+use std::time::{Instant, Duration};
 
 #[derive(Clone)]
 enum Racer {
 	Entered { user: User },
 	Ready { user: User },
-	Finished { user: User, time: SystemTime },
+	Finished { user: User, time: Instant },
 }
 
 enum Race {
@@ -31,7 +31,7 @@ enum Race {
 		ready: usize,
 	},
 	Running {
-		started: SystemTime,
+		started: Instant,
 		players: HashMap<UserId, Racer>,
 		finished: usize,
 	},
@@ -39,6 +39,14 @@ enum Race {
 
 lazy_static! {
 	static ref RACES: Arc<Mutex<HashMap<ChannelId, Race>>> = { Arc::new(Mutex::new(HashMap::new())) };
+}
+
+fn make_nice_time(duration: Duration) -> String {
+	let secs = duration.as_secs();
+	let subsec = duration.subsec_nanos();
+	let _ftime = (secs % 60) as f64 + (subsec as f64 * 1e-9);
+	let minutes = secs / 60;
+	format!("{:02}:{:02}:{:02}", minutes / 60, minutes % 60, secs)
 }
 
 command!(open_race(_ctx, msg) {
@@ -141,7 +149,7 @@ command!(ready_for_race(_ctx, msg) {
 					.unwrap();
 
 				*race = Race::Running {
-					started: SystemTime::now(),
+					started: Instant::now(),
 					players: players.clone(),
 					finished: 0
 				};
@@ -171,20 +179,25 @@ command!(done_race(_ctx, msg) {
 				.send_message(|send| send.content("Can't finish race, it's not started yet!"))
 				.unwrap();
 		},
-		Race::Running{ started: _, ref mut players, ref mut finished } => {
+		Race::Running{ started, ref mut players, ref mut finished } => {
 			let player_count = players.len();
 			if let Some(player) = players.get_mut(&msg.author.id) {
 				match player {
 					Racer::Entered {..} => { panic!("Entered racer in running race??"); },
 					Racer::Ready { user } => {
 						println!("{:?} is finished in {:?}", msg.author, chan);
+						let finish_time = Instant::now();
 						*player = Racer::Finished {
 							user: user.clone(),
-							time: SystemTime::now(),
+							time: finish_time,
 						};
 						*finished += 1;
 						chan
-							.send_message(|smsg| smsg.content(&format!("{} finished in {} place!", msg.author, Ordinal::from(*finished))))
+							.send_message(|smsg| smsg.content(&format!("{} finished in {} place with a time of {}!", 
+								msg.author, 
+								Ordinal::from(*finished),
+								make_nice_time(finish_time.duration_since(*started))
+								)))
 							.unwrap();
 					},
 					Racer::Finished {..} => {
