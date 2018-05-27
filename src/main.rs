@@ -46,7 +46,7 @@ fn make_nice_time(duration: Duration) -> String {
 	let subsec = duration.subsec_nanos();
 	let _ftime = (secs % 60) as f64 + (subsec as f64 * 1e-9);
 	let minutes = secs / 60;
-	format!("{:02}:{:02}:{:02}", minutes / 60, minutes % 60, secs)
+	format!("{:02}:{:02}:{:02}", minutes / 60, minutes % 60, secs % 60)
 }
 
 command!(open_race(_ctx, msg) {
