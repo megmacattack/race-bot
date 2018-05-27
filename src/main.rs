@@ -21,6 +21,7 @@ use std::time::{Instant, Duration};
 enum Racer {
 	Entered { user: User },
 	Ready { user: User },
+	Forfeited { user: User, time: Instant },
 	Finished { user: User, time: Instant },
 }
 
@@ -34,6 +35,7 @@ enum Race {
 		started: Instant,
 		players: HashMap<UserId, Racer>,
 		finished: usize,
+		forfeited: usize,
 	},
 }
 
@@ -61,7 +63,7 @@ command!(open_race(_ctx, msg) {
 				ready: 0,
 			};
 			chan
-				.send_message(|msg| msg.content("race opened: Please !enter the race and !ready once ready"))
+				.send_message(|smsg| smsg.content(&format!("{} opened a race! Anyone who wants to play please !enter the race", msg.author)))
 				.unwrap();
 
 		},
@@ -93,7 +95,7 @@ command!(enter_race(_ctx, msg) {
 				println!("{:?} entered race in {:?}", msg.author, chan);
 				players.insert(msg.author.id, Racer::Entered { user: msg.author.clone() });
 				chan
-					.send_message(|smsg| smsg.content(&format!("{} entered the race!", msg.author)))
+					.send_message(|smsg| smsg.content(&format!("{} entered the race! Please !ready when you're ready to start, !leave if you change your mind.", msg.author)))
 					.unwrap();
 			} else {
 				chan
@@ -139,6 +141,7 @@ command!(ready_for_race(_ctx, msg) {
 							.unwrap();
 					},
 					Racer::Finished { .. } => { panic!("Finished racer when race not running??") },
+					Racer::Forfeited { .. } => { panic!("Finished racer when race not running??") },
 				}
 			}
 
@@ -151,7 +154,61 @@ command!(ready_for_race(_ctx, msg) {
 				*race = Race::Running {
 					started: Instant::now(),
 					players: players.clone(),
-					finished: 0
+					finished: 0,
+					forfeited: 0,
+				};
+			}
+		},
+		Race::Running{ .. } => {
+			chan
+				.send_message(|send| send.content("Can't ready up, game in progress."))
+				.unwrap();						
+		}
+	}
+
+});
+
+command!(leave_race(_ctx, msg) {
+	let chan = msg.channel_id;
+	let mut races = RACES.lock().unwrap();
+	let race = races.entry(chan).or_insert(Race::None);
+	match race {
+		Race::None => {
+			chan
+				.send_message(|send| send.content("Can't enter race, none are open!"))
+				.unwrap();
+		},
+		Race::Open{ ref mut players, ref mut ready } => {
+			let player_count = players.len() - 1;
+
+			if let Some(player) = players.get_mut(&msg.author.id) {
+				match player {
+					Racer::Entered { .. } => {
+					},
+					Racer::Ready { .. } => {
+						*ready -= 1;
+					},
+					Racer::Finished { .. } => { panic!("Finished racer when race not running??") },
+					Racer::Forfeited { .. } => { panic!("Finished racer when race not running??") },
+				}
+			}
+			players.remove(&msg.author.id);
+			println!("{:?} is leaving the race in {:?}", msg.author, chan);
+			chan
+				.send_message(|smsg| smsg.content(&format!("{} left the race.", msg.author)))
+				.unwrap();
+
+			if *ready == player_count && *ready > 0 {
+				println!("all players are ready, starting race in {:?}", chan);
+				chan
+					.send_message(|smsg| smsg.content("All players ready, starting race!"))
+					.unwrap();
+
+				*race = Race::Running {
+					started: Instant::now(),
+					players: players.clone(),
+					finished: 0,
+					forfeited: 0,
 				};
 			}
 		},
@@ -179,7 +236,7 @@ command!(done_race(_ctx, msg) {
 				.send_message(|send| send.content("Can't finish race, it's not started yet!"))
 				.unwrap();
 		},
-		Race::Running{ started, ref mut players, ref mut finished } => {
+		Race::Running{ started, ref mut players, ref mut finished, ref mut forfeited } => {
 			let player_count = players.len();
 			if let Some(player) = players.get_mut(&msg.author.id) {
 				match player {
@@ -205,10 +262,76 @@ command!(done_race(_ctx, msg) {
 							.send_message(|smsg| smsg.content(&format!("{} was already finished.", msg.author)))
 							.unwrap();
 					}
+					Racer::Forfeited {..} => {
+						chan
+							.send_message(|smsg| smsg.content(&format!("{} was already forfeited.", msg.author)))
+							.unwrap();
+					}
 				}
 			}
 
-			if *finished == player_count {
+			if *finished + *forfeited == player_count {
+				println!("all players are finished, ending race in {:?}", chan);
+				chan
+					.send_message(|smsg| smsg.content("All players finished, race is over!"))
+					.unwrap();
+
+				*race = Race::None;
+			}
+		}
+	}
+
+});
+
+command!(forfeit_race(_ctx, msg) {
+	let chan = msg.channel_id;
+	let mut races = RACES.lock().unwrap();
+	let race = races.entry(chan).or_insert(Race::None);
+	match race {
+		Race::None => {
+			chan
+				.send_message(|send| send.content("Can't forfeit from race, it's not open yet!"))
+				.unwrap();
+		},
+		Race::Open{ .. } => {
+			chan
+				.send_message(|send| send.content("Can't forfeit from race, it's not started yet!"))
+				.unwrap();
+		},
+		Race::Running{ started, ref mut players, ref mut finished, ref mut forfeited } => {
+			let player_count = players.len();
+			if let Some(player) = players.get_mut(&msg.author.id) {
+				match player {
+					Racer::Entered {..} => { panic!("Entered racer in running race??"); },
+					Racer::Ready { user } => {
+						println!("{:?} forfeit at {:?}", msg.author, chan);
+						let finish_time = Instant::now();
+						*player = Racer::Forfeited {
+							user: user.clone(),
+							time: finish_time,
+						};
+						*forfeited += 1;
+						chan
+							.send_message(|smsg| smsg.content(&format!("{} forfeit at {}!", 
+								msg.author,
+								make_nice_time(finish_time.duration_since(*started))
+								)))
+							.unwrap();
+					},
+					Racer::Finished {..} => {
+						chan
+							.send_message(|smsg| smsg.content(&format!("{} was already finished.", msg.author)))
+							.unwrap();
+					}
+					Racer::Forfeited {..} => {
+						chan
+							.send_message(|smsg| smsg.content(&format!("{} was already forfeited.", msg.author)))
+							.unwrap();
+					}
+				}
+			}
+
+			if *finished + *forfeited == player_count {
 				println!("all players are finished, ending race in {:?}", chan);
 				chan
 					.send_message(|smsg| smsg.content("All players finished, race is over!"))
@@ -233,8 +356,10 @@ fn main() {
 		.configure(|config| config.prefix("!"))
 		.cmd("open", open_race)
 		.cmd("enter", enter_race)
+		.cmd("leave", leave_race)
 		.cmd("ready", ready_for_race)
 		.cmd("done", done_race)
+		.cmd("forfeit", forfeit_race)
 	);
 
     println!("Race bot started");
